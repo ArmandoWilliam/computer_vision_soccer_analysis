@@ -1,6 +1,8 @@
 from collections import OrderedDict
 from scipy.spatial import distance
 
+import numpy as np
+
 class Tracker:
     def __init__(self, maxLost = 30):
         self.nextObjectID = 0

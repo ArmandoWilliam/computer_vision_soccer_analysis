@@ -2,3 +2,6 @@ configuration_files/
 projectEnv/
 videos/
 .vscode/
+SDproject.ipynb
+__pycache__
+result.avi
