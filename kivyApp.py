@@ -8,12 +8,20 @@ from kivy.clock import Clock
 from kivy.graphics.texture import Texture
 from kivy.uix.popup import Popup
 from kivy.core.window import Window
+from kivy.uix.modalview import ModalView
+import time
 import os.path
 
 import main_app
 from main_app import cv
 import numpy as np
 
+
+class MyPopup(Popup):
+    def __init__(self, **kwargs):
+        super(MyPopup, self).__init__(**kwargs)
+        self.title = 'GOAL'
+        self.content = Label(text='GOOOOOOOOL')
 class SoccerApp(App):
 
     (H, W) = (None, None)
@@ -97,10 +105,35 @@ class SoccerApp(App):
 
             # Perform detection with YOLO and tracking with algorithms
             # Detect the colors of the players and the ball
-            edit_image = main_app.process_one_image(frame)
+            edit_image, goal_result = main_app.process_one_image(frame)
             # prev_frame = edit_image.copy().astype(np.float32)
 
+            paused = False
+
+            def on_popup_dismiss(popup):
+                global paused
+                paused = True
+                Clock.unschedule()
+                print('Popup dismissed')
+            
+            def on_play_button_press(button):
+                global paused
+                paused = False
+                Clock.schedule_interval(self.update_image,1/25)
+
+
             #save the frame in the video "result.avi"
+            """ if goal_result is not None and goal_result > 0:
+                # Pause for 2 seconds
+                time.sleep(2)
+                # Create the popup
+                popup = MyPopup(size_hint=(None, None), size=(400, 400))
+                # popup.bind(on_dismiss=on_popup_dismiss)
+                # Display the popup
+                popup.open()
+                # Pause execution until the popup is dismissed
+                # popup.wait_for_dismiss() """
+
             self.writer.write(edit_image)
 
             frame_BGR = cv.cvtColor(edit_image, cv.COLOR_RGB2BGR)

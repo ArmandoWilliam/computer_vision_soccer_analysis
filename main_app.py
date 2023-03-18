@@ -1,6 +1,9 @@
+# -*- coding: utf-8 -*-
 import cv2 as cv
 import numpy as np
 from custom_tracker import Tracker
+# import multiprocessing
+# import numba as nb
 
 import kivyApp
 
@@ -8,8 +11,8 @@ import kivyApp
 yolomodel = {"config_path":"configuration_files/yolo-obj.cfg",
               "model_weights_path":"configuration_files/yolo-obj_best.weights",
               "dataset_names":"configuration_files/obj.names",
-              "confidence_threshold": 0.5,
-              "threshold":0.3
+              "confidence_threshold": 0.1,
+              "threshold":0.05
              }
              
 #video_src = "highlights.mp4"
@@ -70,38 +73,41 @@ def color_detection(image, show = False): #<-- True for debugging
               cv.destroyAllWindows()
     return 'not_sure'
 
-def calculate_player_speed(prev_frame, actual_frame, x, y, w, h):
-    prev_gray = cv.cvtColor(prev_frame, cv.COLOR_BGR2GRAY)
-    act_gray = cv.cvtColor(actual_frame, cv.COLOR_BGR2GRAY)
+# only if the camera is fixed!
+def calculate_player_speed(prev_frame, actual_frame, x, y, w, h, displacement_threshold, fps):
+    # initialize the Kalman filter
+    kalman = cv.KalmanFilter(4, 2, 0)
+    kalman.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32)
+    kalman.transitionMatrix = np.array([[1, 0, 1, 0], [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32)
+    kalman.processNoiseCov = np.array([[1e-4, 0, 0, 0], [0, 1e-4, 0, 0], [0, 0, 2.5e-2, 0], [0, 0, 0, 2.5e-2]], np.float32) 
 
-    # apply a Gaussian blur to the image to reduce noise
-    prev_gray = cv.GaussianBlur(prev_gray, (5, 5), 0)
-    act_gray = cv.GaussianBlur(act_gray, (5, 5), 0)
+    prev_gray = cv.cvtColor(prev_frame, cv.COLOR_RGB2GRAY)
+    actual_gray = cv.cvtColor(actual_frame, cv.COLOR_RGB2GRAY)
 
-    # calculate optical flow between the previous and current frames
-    flow = cv.calcOpticalFlowFarneback(prev_gray, act_gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+    # convert the images to 8-bit depth
+    prev_gray = cv.convertScaleAbs(prev_gray)
+    actual_gray = cv.convertScaleAbs(actual_gray)
 
-    # calculate the magnitude and angle of the optical flow vectors
-    magnitude, angle = cv.cartToPolar(flow[..., 0], flow[..., 1])
+    # calculate the optical flow
+    prev_corners = np.array([[x, y], [x+w, y], [x, y+h], [x+w, y+h]], dtype=np.float32).reshape(-1, 1, 2)
+    next_corners, status, _ = cv.calcOpticalFlowPyrLK(prev_gray, actual_gray, prev_corners, None)
 
-    # create a mask to threshold the magnitude of the flow vectors
-    mask = np.zeros_like(magnitude, dtype=np.uint8)
-    mask[magnitude > 2] = 255
+    # update the Kalman filter with the measured position
+    if status.all():
+        measured = np.array([[next_corners.mean(axis=0)[0][0]], [next_corners.mean(axis=0)[0][1]]], np.float32)
+        kalman.correct(measured)
 
-    # find contours in the mask to locate moving objects
-    contours, hierarchy = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-        
-    # calculate the average magnitude and angle of the flow vectors around the center of the contour
-    avg_magnitude = np.mean(magnitude[y:y+h, x:x+w])
-    avg_angle = np.mean(angle[y:y+h, x:x+w])
-        
+    # predict the position and velocity using the Kalman filter
+    prediction = kalman.predict()
+
     # calculate the speed of the player
-    speed = avg_magnitude * np.cos(avg_angle)
-    
-    # update the previous frame
-    # prev_frame = act_gray.copy().astype(np.float32)
-
-    return speed
+    displacement = np.sqrt((prediction[0][0]-x)**2 + (prediction[1][0]-y)**2)
+    if displacement < displacement_threshold:
+        return 0
+    else:
+        speed_pixel_frame = displacement
+        speed_km_h = (speed_pixel_frame * 0.010 * fps * 3.6) / 100
+        return speed_km_h
 
 prev_frame = None
 
@@ -140,7 +146,10 @@ def process_one_image(image):
     idxs = cv.dnn.NMSBoxes(boxes, confidences, yolomodel["confidence_threshold"], yolomodel["threshold"])
 
     j = 0
+    result = None
     if len(idxs)>0:
+        ball_center = None
+        goal_coordinates = None
         for i in idxs.flatten():
             (x, y) = (boxes[i][0], boxes[i][1])
             (w, h) = (boxes[i][2], boxes[i][3])
@@ -148,13 +157,13 @@ def process_one_image(image):
 
             # assigning color to the bounding boxes, out is a list of the three integers representing the RGB values
             clr = [int(c) for c in bbox_colors[classIDs[i]]]
-
-            ball_center = None
-            goal_coordinates = None 
+ 
             if labels[classIDs[i]] == "B":
                 # the object is the ball
                 ball_center = ((2 * boxes[i][0] + boxes[i][2]) / 2, (2 * boxes[i][1] + boxes[i][3]) / 2)
                 # print("found the ball")
+                cv.rectangle(image, (x, y), (x+w, y+h), (0, 0, 255), 2)
+
             if labels[classIDs[i]] == "Goal":
                 # the object is the Goal
                 # calculate the goal polygon
@@ -164,36 +173,54 @@ def process_one_image(image):
                 x3, y3 = boxes[i][0] + boxes[i][2], boxes[i][1] + boxes[i][3]
                 x4, y4 = boxes[i][0], boxes[i][1] + boxes[i][3]
                 goal_coordinates = np.array([(x1,y1), (x2,y2), (x3,y3), (x4,y4)])
+                cv.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
             
             # check if ball and goal coordinates are detected
             if ball_center is not None and goal_coordinates is not None:
                 print("I'll check if is goal")
                 points = goal_coordinates.reshape((-1,1,2))
                 result = cv.pointPolygonTest(points, ball_center, False)
+                #result = 1 #debug
                 if result > 0:
                     print("GOOOOOOOL")
+                    # define the position and size of the black box
+                    box_x = image.shape[1] - 150
+                    box_y = image.shape[0] - 75
+                    box_w = 150
+                    box_h = 75
+
+                    # create the black box
+                    cv.rectangle(image, (box_x, box_y), (box_x + box_w, box_y + box_h), (0, 0, 0), -1)
+
+                    # wite "GOAL" in white text on the black box
+                    text_x = box_x + 10
+                    text_y = box_y + 50
+                    font = cv.FONT_HERSHEY_SIMPLEX
+                    font_scale = 1
+                    color = (255, 255, 255)
+                    thickness = 2
+                    cv.putText(image, "GOAL", (text_x, text_y), font, font_scale, color, thickness)
+
 
             # if the object is a player
             if labels[classIDs[i]] == "P":
                 if prev_frame is not None:
-                    print(f'checking the speed of the player {j}')
-                    player_speed.append(float(calculate_player_speed(prev_frame, image, boxes[i][0], boxes[i][1], boxes[i][2], boxes[i][3])))
+                    print('checking the speed of the player %d' % j)
+                    player_speed.append(float(calculate_player_speed(prev_frame, image, boxes[i][0], boxes[i][1], boxes[i][2], boxes[i][3], 500, 25)))
                     j+=1
-                print(f'bounding box num. {i}')
+                print('bounding box num. %d' % i)
                 color = color_detection(image[y:y+h,x:x+w])
                 if color != 'not_sure':
                     if color == 'black':
                         cv.rectangle(image, (x, y), (x+w, y+h), (0, 0, 0), 2)
                     else:
                         cv.rectangle(image, (x, y), (x+w, y+h), (0, 0, 255), 2)
+                if len(player_speed) >= 1:
+                    cv.putText(image, "{}: {:.4f}: {:.2f} km/h".format(labels[classIDs[i]], confidences[i], player_speed[j-1]), (x, y-5), cv.FONT_HERSHEY_SIMPLEX, 0.5, (250, 0, 0), 2)
             else:
-                cv.rectangle(image, (x, y), (x+w, y+h), clr, 2)
-            if prev_frame is None:
-                cv.putText(image, "{}: {:.4f}".format(labels[classIDs[i]], confidences[i]), (x, y-5), cv.FONT_HERSHEY_SIMPLEX, 0.5, clr, 2)
-            if prev_frame is not None:
-                cv.putText(image, "{}: {:.4f}: {:.2f}".format(labels[classIDs[i]], confidences[i], player_speed[j-1]), (x, y-5), cv.FONT_HERSHEY_SIMPLEX, 0.5, clr, 2)
-            
-                
+               cv.rectangle(image, (x, y), (x+w, y+h), clr, 2)
+            cv.putText(image, "{}: {:.4f}".format(labels[classIDs[i]], confidences[i]), (x, y-5), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)        
+
 
     objects = tracker.update(detections_bbox)
 
@@ -203,7 +230,9 @@ def process_one_image(image):
         cv.circle(image, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
 
     prev_frame = image.copy().astype(np.float32)
-    return image
+
+    return image, result
+
 
 if __name__ == '__main__':
     kivyApp.SoccerApp().run()

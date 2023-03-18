@@ -5,3 +5,5 @@ videos/
 SDproject.ipynb
 __pycache__
 result.avi
+bin/
+older.py
