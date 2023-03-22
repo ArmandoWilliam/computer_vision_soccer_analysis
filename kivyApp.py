@@ -16,6 +16,8 @@ import main_app
 from main_app import cv
 import numpy as np
 
+FPS = 30
+
 
 class MyPopup(Popup):
     def __init__(self, **kwargs):
@@ -38,7 +40,7 @@ class SoccerApp(App):
         # label=Label(text="Name (add the extension):",size_hint=(0.1,1))
         # input_box.add_widget(label)
         # self.nameVideo=TextInput(text="example: soccer.mp4",multiline=True)
-        self.nameVideo=TextInput(text="videos/goals_2.mp4",multiline=False, size_hint=(0.3,0.5))
+        self.nameVideo=TextInput(text="videos/goal_chelsea_2.mp4",multiline=False, size_hint=(0.3,0.5))
         input_box_2.add_widget(self.nameVideo)
         input_box_2.submit=Button(text="Submit",italic=True,size_hint=(0.3,0.5))
         input_box_2.add_widget(input_box_2.submit)
@@ -86,12 +88,9 @@ class SoccerApp(App):
             pop.open()
     def start_detection(self, instance):
         self.capture = cv.VideoCapture(self.titoloVideo)
-        self.frame = None
         # Call the Clock schedule_interval method to update the image
-        self.interval = Clock.schedule_interval(self.update_image,1/25)
+        self.interval = Clock.schedule_interval(self.update_image,1/FPS)
     
-    # to keep the past frame
-    # prev_frame = None
 
     def update_image(self, dt):
         # global prev_frame
@@ -101,11 +100,11 @@ class SoccerApp(App):
             if self.writer is None: 
                 (H, W) = frame.shape[:2]
                 self.fourcc = cv.VideoWriter_fourcc(*"MJPG")
-                self.writer = cv.VideoWriter("result.avi", self.fourcc, 25, (W, H), True)
+                self.writer = cv.VideoWriter("result.avi", self.fourcc, FPS, (W, H), True)
 
             # Perform detection with YOLO and tracking with algorithms
             # Detect the colors of the players and the ball
-            edit_image, goal_result = main_app.process_one_image(frame)
+            edit_image, goal_result = main_app.process_one_image(frame, FPS)
             # prev_frame = edit_image.copy().astype(np.float32)
 
             paused = False
@@ -119,7 +118,7 @@ class SoccerApp(App):
             def on_play_button_press(button):
                 global paused
                 paused = False
-                Clock.schedule_interval(self.update_image,1/25)
+                Clock.schedule_interval(self.update_image,1/FPS)
 
 
             #save the frame in the video "result.avi"

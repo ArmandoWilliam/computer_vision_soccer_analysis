@@ -1,3 +1,4 @@
+.gitignore
 configuration_files/
 projectEnv/
 videos/
@@ -7,3 +8,7 @@ __pycache__
 result.avi
 bin/
 older.py
+util.py
+players
+auto_color_detection.py
+goal_images
