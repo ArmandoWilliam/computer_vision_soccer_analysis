@@ -11,6 +11,7 @@ from kivy.core.window import Window
 from kivy.uix.modalview import ModalView
 import time
 import os.path
+from kivy.graphics import Rectangle, Color
 
 import main_app
 from main_app import cv
@@ -24,49 +25,116 @@ class MyPopup(Popup):
         super(MyPopup, self).__init__(**kwargs)
         self.title = 'GOAL'
         self.content = Label(text='GOOOOOOOOL')
+        
+class PercentageBar(BoxLayout):
+    def __init__(self, first_percentage, second_percentage, **kwargs):
+        super().__init__(**kwargs)
+        
+        # calculate the width of each rectangle based on the percentages
+        first_percentage_width = first_percentage / 100 * self.width
+        second_percentage_width = second_percentage / 100 * self.width
+        
+        # create the white rectangle
+        with self.canvas:
+            Color(1, 1, 1)
+            self.white_rect = Rectangle(pos=self.pos, size=(first_percentage_width, self.height))
+        
+        # create the blue rectangle
+        with self.canvas:
+            Color(0, 0, 1)
+            self.blue_rect = Rectangle(pos=(self.pos[0] + first_percentage_width, self.pos[1]), size=(second_percentage_width, self.height))
 class SoccerApp(App):
 
     (H, W) = (None, None)
     writer = None
     interval = None
-
+    
     def build(self):
         # Create a box layout with two buttons and an Image widget
-        box_layout = BoxLayout(orientation='vertical',spacing=10,padding=20)
-        horizontal_box=BoxLayout(orientation='horizontal')
-        input_box=BoxLayout(orientation='horizontal')
-        input_box_2=BoxLayout(orientation='horizontal')
-        # Add a label for the buttons
-        # label=Label(text="Name (add the extension):",size_hint=(0.1,1))
-        # input_box.add_widget(label)
-        # self.nameVideo=TextInput(text="example: soccer.mp4",multiline=True)
-        self.nameVideo=TextInput(text="videos/mc_possession.mp4",multiline=False, size_hint=(0.3,0.5))
-        input_box_2.add_widget(self.nameVideo)
-        input_box_2.submit=Button(text="Submit",italic=True,size_hint=(0.3,0.5))
+        box_layout = BoxLayout(orientation='vertical', spacing=10, padding=20)
+        
+        # Create the Image widget and add it to the box layout
+        self.image = Image(allow_stretch=True, keep_ratio=True, size_hint=(1, 1))
+        box_layout.add_widget(self.image)
+
+        # Add the nameVideo TextInput and Submit button in a horizontal box layout
+        input_box = BoxLayout(orientation='horizontal', size_hint=(1, 0.1))
+        self.nameVideo = TextInput(text="videos/mc_possession.mp4", multiline=False, size_hint=(0.7, 1))
+        input_box.add_widget(self.nameVideo)
+        input_box_2 = BoxLayout(orientation='horizontal', size_hint=(0.3, 1))
+        input_box_2.submit = Button(text="Submit", italic=True, size_hint=(0.5, 1))
+
         input_box_2.add_widget(input_box_2.submit)
-
+        input_box.add_widget(input_box_2)
         box_layout.add_widget(input_box)
-        box_layout.add_widget(input_box_2)
 
-        # Create the buttons
-        btn_start = Button(text='Start Detection',italic=True,size_hint=(0.3,0.5))
-        btn_stop = Button(text='Stop Detection',italic=True,size_hint=(0.3,0.5))
+        # Create the buttons and place them in a horizontal box layout
+        horizontal_box = BoxLayout(orientation='horizontal', size_hint=(1, 0.1))
+        btn_start = Button(text='Start Detection', italic=True, size_hint=(0.5, 1))
+        btn_stop = Button(text='Stop Detection', italic=True, size_hint=(0.5, 1))
+        horizontal_box.add_widget(btn_start)
+        horizontal_box.add_widget(btn_stop)
+        box_layout.add_widget(horizontal_box)
 
         # Bind the buttons to their respective functions
         input_box_2.submit.bind(on_press=self.upload_video)
         btn_start.bind(on_press=self.start_detection)
         btn_stop.bind(on_press=self.stop_detection)
 
-        
-        # Create the Image widget and add it to the box layout
-        self.image = Image(allow_stretch=True, keep_ratio=True, size_hint=(1, 1), size=(box_layout.width, box_layout.height))
-        box_layout.add_widget(self.image)
-
-        horizontal_box.add_widget(btn_start)
-        horizontal_box.add_widget(btn_stop)
-        box_layout.add_widget(horizontal_box)
+        # Create the PercentageBar widget and add it to the box layout
+        self.percentage_bar = PercentageBar(50, 50, size_hint=(1, 0.1))
+        box_layout.add_widget(self.percentage_bar)
 
         return box_layout
+
+
+###------------------------------- HOLD UI ---------------------------------###
+
+    # def build(self):
+    #     # Create a box layout with two buttons and an Image widget
+    #     box_layout = BoxLayout(orientation='vertical',spacing=10,padding=20)
+    #     horizontal_box=BoxLayout(orientation='horizontal')
+    #     input_box=BoxLayout(orientation='horizontal')
+    #     input_box_2=BoxLayout(orientation='horizontal')
+    #     # Add a label for the buttons
+    #     # label=Label(text="Name (add the extension):",size_hint=(0.1,1))
+    #     # input_box.add_widget(label)
+    #     # self.nameVideo=TextInput(text="example: soccer.mp4",multiline=True)
+        
+    #     # Create the Image widget and add it to the box layout
+    #     self.image = Image(allow_stretch=True, keep_ratio=True, size_hint=(1, 1), size=(box_layout.width, box_layout.height))
+    #     box_layout.add_widget(self.image)
+        
+    #     self.nameVideo=TextInput(text="videos/mc_possession.mp4",multiline=False, size_hint=(0.3,0.5))
+    #     input_box_2.add_widget(self.nameVideo)
+    #     input_box_2.submit=Button(text="Submit",italic=True,size_hint=(0.3,0.5))
+    #     input_box_2.add_widget(input_box_2.submit)
+
+    #     box_layout.add_widget(input_box)
+    #     box_layout.add_widget(input_box_2)
+
+    #     # Create the buttons
+    #     btn_start = Button(text='Start Detection',italic=True,size_hint=(0.3,0.5))
+    #     btn_stop = Button(text='Stop Detection',italic=True,size_hint=(0.3,0.5))
+
+    #     # Bind the buttons to their respective functions
+    #     input_box_2.submit.bind(on_press=self.upload_video)
+    #     btn_start.bind(on_press=self.start_detection)
+    #     btn_stop.bind(on_press=self.stop_detection)
+
+    #     horizontal_box.add_widget(btn_start)
+    #     horizontal_box.add_widget(btn_stop)
+    #     box_layout.add_widget(horizontal_box)
+        
+    #     # create the PercentageBar widget
+    #     self.percentage_bar = PercentageBar(50, 50)
+        
+    #     # place the PercentageBar widget
+    #     horizontal_box.add_widget(self.percentage_bar)
+
+    #     return box_layout
+    
+###-------------------------------------------------------------------------###
     
     def upload_video(self,instance):
         self.titoloVideo=self.nameVideo.text
@@ -90,8 +158,13 @@ class SoccerApp(App):
         self.capture = cv.VideoCapture(self.titoloVideo)
         # Call the Clock schedule_interval method to update the image
         self.interval = Clock.schedule_interval(self.update_image,1/FPS)
+        
+        
+    def update_percentage_bar(self, current_size, total_size):
+        percentage = (current_size / total_size) * 100
+        self.percentage_text.text = f"{percentage:.2f}%"
+        self.blue_rect.size = (self.percentage_bar.width * (percentage / 100), self.blue_rect.height)
     
-
     def update_image(self, dt):
         # global prev_frame
         ret, frame = self.capture.read()
@@ -104,7 +177,13 @@ class SoccerApp(App):
 
             # Perform detection with YOLO and tracking with algorithms
             # Detect the colors of the players and the ball
-            edit_image, goal_result = main_app.process_one_image(frame, FPS)
+            edit_image, percentage_possession_team_A, percentage_possession_team_B = main_app.process_one_image(frame, FPS)
+            
+             # Update the percentage bar
+            self.percentage_bar.white_rect.size = (percentage_possession_team_A / 100 * self.percentage_bar.width, self.percentage_bar.height)
+            self.percentage_bar.blue_rect.pos = (self.percentage_bar.white_rect.pos[0] + self.percentage_bar.white_rect.size[0], self.percentage_bar.pos[1])
+            self.percentage_bar.blue_rect.size = (percentage_possession_team_B / 100 * self.percentage_bar.width, self.percentage_bar.height)
+             
             # prev_frame = edit_image.copy().astype(np.float32)
 
             paused = False
