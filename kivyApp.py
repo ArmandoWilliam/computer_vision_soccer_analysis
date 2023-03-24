@@ -40,7 +40,7 @@ class SoccerApp(App):
         # label=Label(text="Name (add the extension):",size_hint=(0.1,1))
         # input_box.add_widget(label)
         # self.nameVideo=TextInput(text="example: soccer.mp4",multiline=True)
-        self.nameVideo=TextInput(text="videos/goal_chelsea_2.mp4",multiline=False, size_hint=(0.3,0.5))
+        self.nameVideo=TextInput(text="videos/mc_possession.mp4",multiline=False, size_hint=(0.3,0.5))
         input_box_2.add_widget(self.nameVideo)
         input_box_2.submit=Button(text="Submit",italic=True,size_hint=(0.3,0.5))
         input_box_2.add_widget(input_box_2.submit)

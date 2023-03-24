@@ -4,6 +4,8 @@ import cv2 as cv
 import numpy as np
 from custom_tracker import Tracker
 from goal_line_finder import *
+from printers import *
+from possession_timer_helper import *
 import os
 # import multiprocessing
 # import numba as nb
@@ -166,10 +168,10 @@ def goal_team(img, goal_coordinates):
 
     # Check if point is on the left or right side of the reference line
     if point[0] < ref_line[0][0]:
-        print("the goal is on the left part of the screen")
+        # print("the goal is on the left part of the screen")
         return 0 # point is on the left
     else:
-        print("the goal is on the right part of the screen")
+        # print("the goal is on the right part of the screen")
         return 1 # point is on the right
         
         
@@ -192,16 +194,16 @@ def check_if_is_goal(image, y1, y4, x1, x2, goal_coordinates, ball_center, frame
     
     if ball_center is not None:
         # ball is detected
-        print("ball center: ", ball_center)
+        # print("ball center: ", ball_center)
         #check if the ball is inside the goal boundig box
         inside_goal_area = cv.pointPolygonTest(goal_coordinates.reshape((-1,1,2)), ball_center, False)
-        print(inside_goal_area)
+        # print(inside_goal_area)
         # check if the ball is in the goal
         if inside_goal_area > 0:
-            print("Ball inside goal area")
+            # print("Ball inside goal area")
             goal_line = find_goal_line(goal_image)
             if goal_line is not None:
-                print("GOAL LINE DETECTED")
+                # print("GOAL LINE DETECTED")
                 ball_position = ball_position_relative_to_line(goal_line, ball_center)
                 if ball_position is not None:
                     if goal_team(image, goal_coordinates) == 0:
@@ -228,62 +230,35 @@ def check_if_is_goal(image, y1, y4, x1, x2, goal_coordinates, ball_center, frame
                             goal = 1
         else:
             # ball is detected and is not in the goal area
-            print("ball is detected and is not in the goal area")
+            # print("ball is detected and is not in the goal area")
             in_goal_area = False
             frames_in_goal = 0
             goal = 0
-        print("score: ", score_team_left, " - ", score_team_right)
-        print("frames in goal: ", frames_in_goal)
+        # print("score: ", score_team_left, " - ", score_team_right)
+        # print("frames in goal: ", frames_in_goal)
         
     return goal
 
-def print_goal_box(image):
-    if image is not None:
-        # print("GOOOOOOOL")
-        # define the position and size of the black box
-        box_x = image.shape[1] - 150
-        box_y = image.shape[0] - 75
-        box_w = 150
-        box_h = 75
-
-        # create the black box
-        cv.rectangle(image, (box_x, box_y), (box_x + box_w, box_y + box_h), (0, 0, 0), -1)
-
-        # wite "GOAL" in white text on the black box
-        text_x = box_x + 10
-        text_y = box_y + 50
-        font = cv.FONT_HERSHEY_SIMPLEX
-        font_scale = 1
-        color = (255, 255, 255)
-        thickness = 2
-        cv.putText(image, "GOAL", (text_x, text_y), font, font_scale, color, thickness)
-
-def print_stopped_game_box(image):
-    if image is not None:
-        # print("GAME STOPPED")
-        # define the position and size of the black box
-        box_x = image.shape[1] - 300
-        box_y = 0
-        box_w = 300
-        box_h = 60
-
-        # create the black box for game stopped
-        cv.rectangle(image, (box_x, box_y), (box_x + box_w, box_y + box_h), (0, 0, 0), -1)
-
-        # wite "GAME STOPPED" in white text on the black box
-        text_x = box_x + 10
-        text_y = box_y + 40
-        font = cv.FONT_HERSHEY_SIMPLEX
-        font_scale = 1
-        color = (255, 255, 255)
-        thickness = 2
-        cv.putText(image, "GAME STOPPED", (text_x, text_y), font, font_scale, color, thickness)
-
 prev_frame = None
-total_possession_time_team_A = 0
-start_time_team_A = None
 ball_center = None
 goal_coordinates = None
+frames_passed = 0
+frame_possession_start = [None, None]
+frames_in_possession = [0, 0]
+last_frame_possession_team_A = None
+last_frame_possession_team_B = None
+seconds_in_possession = [0, 0]
+total_frame_in_possession = [0, 0]
+changing_possession_time = 0
+
+### --------------------SOLUZIONE 2----------------------#
+    
+counter_frames_possession = [0, 0] # team A and team B
+second_in_possession_sol_2 = [0, 0]
+percentage_possession = [0, 0]
+    
+###------------------------------------------------------#
+
 
 def process_one_image(image, fps):
     
@@ -292,8 +267,26 @@ def process_one_image(image, fps):
     #     cv.destroyAllWindows()
 
     global prev_frame
-    global total_possession_time_team_A
-    global start_time_team_A
+    global frames_passed
+    global frame_possession_start
+    global frames_in_possession
+    global last_frame_possession_team_A
+    global last_frame_possession_team_B
+    global seconds_in_possession
+    global total_frame_in_possession
+    global changing_possession_time
+    
+    ### --------------------SOLUZIONE 2----------------------#
+    
+    global counter_frames_possession
+    global second_in_possession_sol_2
+    global percentage_possession
+    
+    ###------------------------------------------------------#
+    
+    #a new is processing
+    frames_passed += 1
+    
     (H, W) = image.shape[:2]
 
     blob = cv.dnn.blobFromImage(image, 1 / 255.0, (416, 416), swapRB=True, crop=False)
@@ -364,7 +357,7 @@ def process_one_image(image, fps):
                 else:
                     cv.putText(image, "{}: {:.4f}".format(labels[classIDs[i]], confidences[i]), (x, y-5), cv.FONT_HERSHEY_SIMPLEX, 0.5, (300, 0, 0), 2)
 
-            if labels[classIDs[i]] == "Goal":
+            elif labels[classIDs[i]] == "Goal":
                 # the object is the Goal
                 # calculate the goal polygon
                 # print("found the goal")
@@ -378,37 +371,138 @@ def process_one_image(image, fps):
 
             # if the object is a player
             # action_and_false_goal.mp4
-            if labels[classIDs[i]] == "P":
+            elif labels[classIDs[i]] == "P":
                 # if prev_frame is not None:
                     # print('checking the speed of the player %d' % j)
                     # player_speed_list.append(float(calculate_object_speed(prev_frame, image, boxes[i][0], boxes[i][1], boxes[i][2], boxes[i][3], 300, 25)))
                     # j+=1
                 # print('bounding box num. %d' % i)
+                player_coordinates = np.array([(x1,y1), (x2,y2), (x3,y3), (x4,y4)])
                 color = color_detection(image[y:y+h,x:x+w])
                 if color != 'not_sure':
                     if color == 'black':
+                        # TEAM 0
+                        if ball_center is not None:
+                            if (check_possession(player_coordinates, ball_center, 80) > 0):
+                                
+                                ### --------------------SOLUZIONE 2--------------------###
+    
+                                counter_frames_possession[0] += 1
+                                    
+                                ###----------------------------------------------------###
+                                
+                                ### --------------------SOLUZIONE 1--------------------###
+                                
+                                # last_frame_possession_team_A = 1
+                                # if(last_frame_possession_team_B == 1):
+                                #     changing_possession_time += 1
+                                #     print("\nPOSSESSION CHANGED FROM B TO A, POSSESSION CHANGED:", changing_possession_time, "\n")                                   
+                                #     if(changing_possession_time == 2):
+                                #         print("POSSESSION CHANGED 3 TIMES")
+                                #         total_frame_in_possession[0] += frames_in_possession[0]
+                                #         total_frame_in_possession[1] += frames_in_possession[1]
+                                #         changing_possession_time = 0
+                                #     if frame_possession_start[1] is not None:
+                                #         frames_in_possession[1] = frames_passed - frame_possession_start[1]
+                                #     frame_possession_start[1] = None
+                                #     last_frame_possession_team_B = 0
+                                # if frame_possession_start[0] is None:
+                                #     frame_possession_start[0] = frames_passed
+                                # else:
+                                #     frames_in_possession[0] = frames_passed - frame_possession_start[0]
+                                    
+                                ###----------------------------------------------------###
+                                                    
                         cv.rectangle(image, (x, y), (x+w, y+h), (0, 0, 0), 2)
                     else:
+                        # TEAM 1
+                        if ball_center is not None:
+                            if (check_possession(player_coordinates, ball_center, 80) > 0):
+                                
+                                ### --------------------SOLUZIONE 2--------------------###
+    
+                                counter_frames_possession[1] += 1
+                                    
+                                ###----------------------------------------------------###  
+                                
+                                ### --------------------SOLUZIONE 1--------------------###
+                                
+                                # last_frame_possession_team_B = 1
+                                # if(last_frame_possession_team_A == 1):
+                                #     changing_possession_time += 1
+                                #     print("\nPOSSESSION CHANGED FROM A TO B, POSSESSION CHANGED:", changing_possession_time, "\n")                                    
+                                #     if(changing_possession_time == 2):
+                                #         print("POSSESSION CHANGED 2 TIMES")
+                                #         total_frame_in_possession[0] += frames_in_possession[0]
+                                #         total_frame_in_possession[1] += frames_in_possession[1]
+                                #         changing_possession_time = 0
+                                #     if frame_possession_start[0] is not None:
+                                #         frames_in_possession[0] = frames_passed - frame_possession_start[0]                                        
+                                #     frame_possession_start[0] = None
+                                #     last_frame_possession_team_A = 0
+                                # if frame_possession_start[1] is None:
+                                #     frame_possession_start[1] = frames_passed
+                                # else:
+                                #     frames_in_possession[1] = frames_passed - frame_possession_start[1]
+                                
+                                ###----------------------------------------------------###
+                                
                         cv.rectangle(image, (x, y), (x+w, y+h), (0, 0, 255), 2)
-                    #calculate possession time
-                    """ if ball_center is not None:
-                        player_coordinates = np.array([(x1,y1), (x2,y2), (x3,y3), (x4,y4)])
-                        if check_if_is_goal(player_coordinates, ball_center) >= 0:
-                            if start_time_team_A is None:
-                                start_time_team_A = time.time
-                            if start_time_team_A is not None:
-                                total_possession_time_team_A = time.time() - start_time_team_A
-                                total_possession_time_team_A += total_possession_time_team_A
-                                start_time_team_A = None
-                                print(total_possession_time_team_A) """
                 # if len(player_speed_list) >= 1:
                    # cv.putText(image, "{}: {:.4f}: {:.2f} km/h".format(labels[classIDs[i]], confidences[i], player_speed_list[j-1]), (x, y-5), cv.FONT_HERSHEY_SIMPLEX, 0.5, (300, 0, 0), 2)
             else:
                cv.rectangle(image, (x, y), (x+w, y+h), clr, 2)
-            cv.putText(image, "{}: {:.4f}".format(labels[classIDs[i]], confidences[i]), (x, y-5), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)        
+            cv.putText(image, "{}: {:.4f}".format(labels[classIDs[i]], confidences[i]), (x, y-5), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        
+        ### --------------------SOLUZIONE 1--------------------###
+        
+        # seconds_in_possession[0] = total_frame_in_possession[0]/30
+        # seconds_in_possession[1] = total_frame_in_possession[1]/30
+        
+        ###----------------------------------------------------###
+        
+        ### --------------------SOLUZIONE 2--------------------###
+        
+        if (counter_frames_possession[0] != 0 and counter_frames_possession[1] != 0):
+            second_in_possession_sol_2[0] = counter_frames_possession[0]/30
+            second_in_possession_sol_2[1] = counter_frames_possession[1]/30
+            
+            percentage_possession[0] = second_in_possession_sol_2[0]/(second_in_possession_sol_2[0] + second_in_possession_sol_2[1])
+            percentage_possession[1] = second_in_possession_sol_2[1]/(second_in_possession_sol_2[0] + second_in_possession_sol_2[1])
+        
+        ###----------------------------------------------------###
+        
+        ### --------------------SOLUZIONE 1--------------------###
+        
+        # print("VARIABLES STATE after: ", frames_passed, " frames\n", 
+        #           "\tframe where possession start for team A:", frame_possession_start[0],
+        #           "\n\tFrame where possession start for team B:", frame_possession_start[1],
+        #           "\n\tFrames in possession for team A in the last ball possession:", frames_in_possession[0], 
+        #           "\n\tFrames in possession for team B in the last ball possession::", frames_in_possession[1],
+        #           "\n\tTotal frames in possession for team A", total_frame_in_possession[0],
+        #           "\n\tTotal frames in possession for team B:", total_frame_in_possession[1], 
+        #           "\n\tLast possessor of the ball is A? (team in ball possession)", last_frame_possession_team_A,
+        #           "\n\tLast possessor of the ball is B? (team in ball possession)", last_frame_possession_team_B,
+        #           "\n\tSecond in possession team A:", seconds_in_possession[0],
+        #           "\n\tSecond in possession team B:", seconds_in_possession[1],"\n")
+        
+        ###----------------------------------------------------###
+        
+        ### --------------------SOLUZIONE 2--------------------###
+        
+        print("VARIABLES STATE after: ", frames_passed, " frames\n",
+                    "\tFrame in possession team A:", counter_frames_possession[0],
+                  "\n\tFrame in possession team B:", counter_frames_possession[1], 
+                  "\n\tSecond in possession team A:", second_in_possession_sol_2[0],
+                  "\n\tSecond in possession team B:", second_in_possession_sol_2[1],
+                  "\n\tPercentage team A ball possession", percentage_possession[0],
+                  "\n\tPercentage team A ball possession", percentage_possession[1], "\n")
+        
+        ###----------------------------------------------------###
 
 
     objects = tracker.update(detections_bbox)
+
 
     for (objectID, centroid) in objects.items():
         text = "ID {}".format(objectID)

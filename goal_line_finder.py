@@ -116,7 +116,7 @@ def ball_position_relative_to_line(goal_line, ball_center):
         
         # Get the position of the ball relative to the line
         position = get_point_position_relative_to_line((ball_x, ball_y), x1, x2)
-        print("Position of the ball relative to the line: ", position)
+        # print("Position of the ball relative to the line: ", position)
         return position
     else:
         print("Goal line not detected")
