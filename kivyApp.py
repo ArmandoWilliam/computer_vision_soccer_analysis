@@ -86,55 +86,6 @@ class SoccerApp(App):
         box_layout.add_widget(self.percentage_bar)
 
         return box_layout
-
-
-###------------------------------- HOLD UI ---------------------------------###
-
-    # def build(self):
-    #     # Create a box layout with two buttons and an Image widget
-    #     box_layout = BoxLayout(orientation='vertical',spacing=10,padding=20)
-    #     horizontal_box=BoxLayout(orientation='horizontal')
-    #     input_box=BoxLayout(orientation='horizontal')
-    #     input_box_2=BoxLayout(orientation='horizontal')
-    #     # Add a label for the buttons
-    #     # label=Label(text="Name (add the extension):",size_hint=(0.1,1))
-    #     # input_box.add_widget(label)
-    #     # self.nameVideo=TextInput(text="example: soccer.mp4",multiline=True)
-        
-    #     # Create the Image widget and add it to the box layout
-    #     self.image = Image(allow_stretch=True, keep_ratio=True, size_hint=(1, 1), size=(box_layout.width, box_layout.height))
-    #     box_layout.add_widget(self.image)
-        
-    #     self.nameVideo=TextInput(text="videos/mc_possession.mp4",multiline=False, size_hint=(0.3,0.5))
-    #     input_box_2.add_widget(self.nameVideo)
-    #     input_box_2.submit=Button(text="Submit",italic=True,size_hint=(0.3,0.5))
-    #     input_box_2.add_widget(input_box_2.submit)
-
-    #     box_layout.add_widget(input_box)
-    #     box_layout.add_widget(input_box_2)
-
-    #     # Create the buttons
-    #     btn_start = Button(text='Start Detection',italic=True,size_hint=(0.3,0.5))
-    #     btn_stop = Button(text='Stop Detection',italic=True,size_hint=(0.3,0.5))
-
-    #     # Bind the buttons to their respective functions
-    #     input_box_2.submit.bind(on_press=self.upload_video)
-    #     btn_start.bind(on_press=self.start_detection)
-    #     btn_stop.bind(on_press=self.stop_detection)
-
-    #     horizontal_box.add_widget(btn_start)
-    #     horizontal_box.add_widget(btn_stop)
-    #     box_layout.add_widget(horizontal_box)
-        
-    #     # create the PercentageBar widget
-    #     self.percentage_bar = PercentageBar(50, 50)
-        
-    #     # place the PercentageBar widget
-    #     horizontal_box.add_widget(self.percentage_bar)
-
-    #     return box_layout
-    
-###-------------------------------------------------------------------------###
     
     def upload_video(self,instance):
         self.titoloVideo=self.nameVideo.text
