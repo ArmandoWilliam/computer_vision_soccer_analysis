@@ -322,7 +322,6 @@ def process_one_image(image, fps):
 
     j = 0
     k = 0
-    result = None
     global ball_center
     global goal_coordinates
     if len(idxs)>0:
@@ -511,7 +510,7 @@ def process_one_image(image, fps):
 
     prev_frame = image.copy()
 
-    return image, result
+    return image, percentage_possession[0], percentage_possession[1]
 
 
 if __name__ == '__main__':
