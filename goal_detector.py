@@ -95,11 +95,11 @@ def check_if_is_goal(image, y1, y4, x1, x2, goal_coordinates, ball_center, frame
 
 def find_goal_line(img):
     
-    # boundaries = [150,255,200], [220,255,255] # barcellona-real
+    boundaries = [150,255,200], [220,255,255] # barcellona-real
     mccity_boundaries = [100, 190, 190], [190,255,244] # mccity goal
     chelsea_boundaries = [100, 150, 170], [160, 210, 190] # chelsea goal
     
-    (lower, upper) = mccity_boundaries
+    (lower, upper) = chelsea_boundaries
     lower = np.array(lower, dtype = "uint8")
     upper = np.array(upper, dtype = "uint8")
         
@@ -137,7 +137,7 @@ def find_goal_line(img):
     threshold = 20
     lines = cv.HoughLinesP(edges, rho,theta, threshold, minLineLength=30, maxLineGap=30)
 
-    # Find the line with the longest length that is approximately vertical
+    # Find the line with the longest length that is approx orizontal
     max_length = 0
     max_line = None
     if lines is not None:
