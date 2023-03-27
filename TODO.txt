@@ -1,4 +1,0 @@
-- 2-d model of the field with videos with a fixed camera (Armando)
-- goal detection
-- speed of the players (Antonio)
-- ..
