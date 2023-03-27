@@ -3,12 +3,12 @@ import time
 import cv2 as cv
 import numpy as np
 from custom_tracker import Tracker
-from goal_line_finder import *
+from goal_detector import *
 from printers import *
 from possession_timer_helper import *
 import os
-# import multiprocessing
-# import numba as nb
+from team_detection import *
+from speed_calculation import *
 
 import kivyApp
 
@@ -38,206 +38,6 @@ bbox_colors = np.random.randint(0, 255, size=(len(labels), 3))
 maxLost = 5
 tracker = Tracker(maxLost = maxLost)
 #cap = cv.VideoCapture(video_src)
-
-def count_nonblack_np(img): 
-    return img.any(axis=-1).sum()
-
-def color_detection(image, show = False): #<-- True for debugging
-
-    # boundaries = [([17, 15, 100], [50, 56, 200]), #orange
-    # ([0, 0, 0], [255, 255, 60])] #blacks
-
-    #boundaries = [([0, 0, 200], [0, 0, 150]), #red
-    #([240, 240, 240], [250, 250, 250])] #white
-    
-    #-------------------------- BGR to HSV converter ---------------------------#
-    # blue = np.uint8([[[255,0,0]]])
-    # hsv_blue = cv.cvtColor(blue,cv.COLOR_BGR2HSV)
-    # hsv_blue = hsv_blue.reshape(3)
-    # hsv_blue_upper = [hsv_blue[0]+10, 255, 100]
-    # hsv_blue_lower = [hsv_blue[0]-10, 100, 100]
-
-    # white = np.uint8([[[255,255,255]]])
-    # hsv_white = cv.cvtColor(white,cv.COLOR_BGR2HSV)
-    # hsv_white = hsv_white.reshape(3)
-    # hsv_white_upper = [hsv_white[0]+10, 255, 255]
-    # hsv_white_lower = [hsv_white[0]-10, 100, 100]
-    #---------------------------------------------------------------------------#
-    
-    # Convert image from BGR to HSV
-    #hsv_image = cv.cvtColor(image, cv.COLOR_BGR2HSV)
-    
-    boundaries = [([60,30,25], [90,70,60]), #blue team
-        ([146,116,96], [200,205,190])] #white team
-    
-    i = 0
-    for (lower, upper) in boundaries:
-        lower = np.array(lower, dtype = "uint8")
-        upper = np.array(upper, dtype = "uint8")
-
-        try:
-            # Threshold the image to get only blue colors
-            mask = cv.inRange(image, lower, upper)
-            # Bitwise-AND mask and original image
-            output = cv.bitwise_and(image, image, mask = mask)
-            tot_pix = count_nonblack_np(image)
-            color_pix = count_nonblack_np(output)
-        except:
-            # print("strange things..")
-            return 'not_sure'
-        ratio = color_pix/tot_pix
-        # print("ratio is:", ratio)
-        if ratio > 0.01 and i == 0:
-            # print("Chelsea")
-            return 'ratio is orange'
-        elif ratio > 0.01 and i == 1:
-            # print("Manchester City")
-            return 'black'
-
-        i += 1
-
-        if show:
-            cv.imshow("images", np.hstack([image, output]))
-            if cv.waitKey(0) & 0xFF == ord('q'):
-              cv.destroyAllWindows()
-              
-    return 'not_sure'
-
-# when the camera is moving
-def optical_flow_calculate_object_speed(prev_frame, next_frame, x, y, w, h, displacement_threshold, fp, show = True):
-    prev_frame_float_32 = np.array(prev_frame, np.float32)
-    # initialize the Kalman filter
-    kalman = cv.KalmanFilter(4, 2, 0)
-    kalman.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32)
-    kalman.transitionMatrix = np.array([[1, 0, 1, 0], [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32)
-    kalman.processNoiseCov = np.array([[1e-4, 0, 0, 0], [0, 1e-4, 0, 0], [0, 0, 2.5e-2, 0], [0, 0, 0, 2.5e-2]], np.float32) 
-
-    prev_gray = cv.cvtColor(prev_frame_float_32, cv.COLOR_BGR2GRAY)
-    next_gray = cv.cvtColor(next_frame, cv.COLOR_BGR2GRAY)
-
-    # convert the images to 8-bit depth
-    prev_gray = cv.convertScaleAbs(prev_gray)
-    next_gray = cv.convertScaleAbs(next_gray)
-
-    # calculate the optical flow
-    prev_corners = np.array([[x, y], [x+w, y], [x, y+h], [x+w, y+h]], dtype=np.float32).reshape(-1, 1, 2)
-    next_corners, status, err = cv.calcOpticalFlowPyrLK(prev_gray, next_gray, prev_corners, None)
-
-    # update the Kalman filter with the measured position
-    if status.all():
-        measured = np.array([[next_corners.mean(axis=0)[0][0]], [next_corners.mean(axis=0)[0][1]]], np.float32)
-        kalman.correct(measured)
-
-    # predict the position and velocity using the Kalman filter
-    prediction = kalman.predict()
-
-    # calculate the speed of the ball
-    corners = np.array([[x, y], [x+w, y], [x, y+h], [x+w, y+h]], dtype=np.float32)
-    speed_sum = 0
-    for corner in corners:
-        displacement = np.sqrt((prediction[0][0]-corner[0])**2 + (prediction[1][0]-corner[1])**2)
-        if displacement < displacement_threshold:
-            speed = 0
-        else:
-            speed = displacement
-        speed_sum += speed
-    speed_pixel_frame = speed_sum / 4
-    # speed_km_h = (speed_pixel_frame * 3.6) / 1000
-    return speed_pixel_frame
-
-score_team_left = 0
-score_team_right = 0
-
-def save_image(img):
-    global score_team_left
-    global score_team_right
-
-    filename = f'GOAL_{score_team_left}_{score_team_right}.jpg'
-    cv.imwrite(filename, img)
-    print("file name: ", filename)  
-        
-def goal_team(img, goal_coordinates):
-
-    # Define reference line (e.g., a vertical line passing through the center of the image)
-    ref_line = (img.shape[1] // 2, 0), (img.shape[1] // 2, img.shape[0])
-
-    # Draw reference line on image (for visualization purposes)
-    cv.line(img, ref_line[0], ref_line[1], (0, 255, 0), 2)
-    
-    point = tuple(goal_coordinates[0])
-
-    # Check if point is on the left or right side of the reference line
-    if point[0] < ref_line[0][0]:
-        # print("the goal is on the left part of the screen")
-        return 0 # point is on the left
-    else:
-        # print("the goal is on the right part of the screen")
-        return 1 # point is on the right
-        
-        
-in_goal_area = False
-start_time = 0
-goal = 0
-frames_in_goal = 0
-
-
-def check_if_is_goal(image, y1, y4, x1, x2, goal_coordinates, ball_center, frames_in_goal_threshold = 4):
-    global in_goal_area
-    global start_time
-    global goal
-    global frames_in_goal
-    global score_team_left
-    global score_team_right
-    # save_image(image)
-    
-    goal_image = image[y1:y4,x1:x2]
-    
-    if ball_center is not None:
-        # ball is detected
-        # print("ball center: ", ball_center)
-        #check if the ball is inside the goal boundig box
-        inside_goal_area = cv.pointPolygonTest(goal_coordinates.reshape((-1,1,2)), ball_center, False)
-        # print(inside_goal_area)
-        # check if the ball is in the goal
-        if inside_goal_area > 0:
-            # print("Ball inside goal area")
-            goal_line = find_goal_line(goal_image)
-            if goal_line is not None:
-                # print("GOAL LINE DETECTED")
-                ball_position = ball_position_relative_to_line(goal_line, ball_center)
-                if ball_position is not None:
-                    if goal_team(image, goal_coordinates) == 0:
-                        # team on the right scored
-                        if(ball_position == 'left'):
-                            if not in_goal_area:
-                                # ball has just entered the goal area
-                                in_goal_area = True
-                            frames_in_goal += 1
-                            if frames_in_goal == 5:
-                                score_team_right += 1
-                                save_image(image)
-                            goal = 1
-                    elif goal_team(image, goal_coordinates) == 1:
-                        # team on the left scored
-                        if(ball_position == 'right'):
-                            if not in_goal_area:
-                                # ball has just entered the goal area
-                                in_goal_area = True
-                            frames_in_goal += 1
-                            if frames_in_goal == 5:
-                                score_team_left += 1
-                                save_image(image)
-                            goal = 1
-        else:
-            # ball is detected and is not in the goal area
-            # print("ball is detected and is not in the goal area")
-            in_goal_area = False
-            frames_in_goal = 0
-            goal = 0
-        # print("score: ", score_team_left, " - ", score_team_right)
-        # print("frames in goal: ", frames_in_goal)
-        
-    return goal
 
 prev_frame = None
 ball_center = None
@@ -344,15 +144,13 @@ def process_one_image(image, fps):
                 # print_stopped_game_box(image)
                 # print("found the ball")
                 if prev_frame is not None:
-                    # ball_speed_list.append(float(calculate_object_speed(prev_frame, image, x, y, w, h, 300, fps)))
-                    # k+=1
-                    #ball_speed = (float(optical_flow_calculate_object_speed(prev_frame, image, x, y, w, h, 400, fps)))
+                    ball_speed = (float(optical_flow_calculate_object_speed(prev_frame, image, x, y, w, h, 400, fps)))
                     cv.rectangle(image, (x, y), (x+w, y+h), (0, 0, 255), 2)
-                    # if ball_speed is not None:
-                    # cv.putText(image, "{}: {:.4f}: {:.2f} pixel/frame".format(labels[classIDs[i]], confidences[i], ball_speed), (x, y-5), cv.FONT_HERSHEY_SIMPLEX, 0.5, (300, 0, 0), 2)
-                    # if ball_speed == 0:
-                    #     # print("game stopped")
-                    #     print_stopped_game_box(image)
+                    if ball_speed is not None:
+                        cv.putText(image, "{}: {:.4f}: {:.2f} pixel/frame".format(labels[classIDs[i]], confidences[i], ball_speed), (x, y-5), cv.FONT_HERSHEY_SIMPLEX, 0.5, (300, 0, 0), 2)
+                    if ball_speed == 0:
+                        # print("game stopped")
+                        print_stopped_game_box(image)
                 else:
                     cv.putText(image, "{}: {:.4f}".format(labels[classIDs[i]], confidences[i]), (x, y-5), cv.FONT_HERSHEY_SIMPLEX, 0.5, (300, 0, 0), 2)
 
@@ -466,8 +264,10 @@ def process_one_image(image, fps):
             second_in_possession_sol_2[0] = counter_frames_possession[0]/30
             second_in_possession_sol_2[1] = counter_frames_possession[1]/30
             
-            percentage_possession[0] = second_in_possession_sol_2[0]/(second_in_possession_sol_2[0] + second_in_possession_sol_2[1])
-            percentage_possession[1] = second_in_possession_sol_2[1]/(second_in_possession_sol_2[0] + second_in_possession_sol_2[1])
+            percentage_possession[0] = (second_in_possession_sol_2[0]/(second_in_possession_sol_2[0] + second_in_possession_sol_2[1])) * 100
+            percentage_possession[1] = (second_in_possession_sol_2[1]/(second_in_possession_sol_2[0] + second_in_possession_sol_2[1])) * 100
+            
+            print_possession(image, percentage_possession[0], percentage_possession[1])
         
         ###----------------------------------------------------###
         

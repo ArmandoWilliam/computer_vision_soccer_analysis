@@ -2,6 +2,97 @@ import cv2 as cv
 import math
 import numpy as np
 
+score_team_left = 0
+score_team_right = 0
+
+
+def save_image(img):
+    global score_team_left
+    global score_team_right
+
+    filename = f'GOAL_{score_team_left}_{score_team_right}.jpg'
+    cv.imwrite(filename, img)
+    print("file name: ", filename)
+
+def goal_team(img, goal_coordinates):
+
+    # Define reference line (e.g., a vertical line passing through the center of the image)
+    ref_line = (img.shape[1] // 2, 0), (img.shape[1] // 2, img.shape[0])
+
+    # Draw reference line on image (for visualization purposes)
+    cv.line(img, ref_line[0], ref_line[1], (0, 255, 0), 2)
+    
+    point = tuple(goal_coordinates[0])
+
+    # Check if point is on the left or right side of the reference line
+    if point[0] < ref_line[0][0]:
+        # print("the goal is on the left part of the screen")
+        return 0 # point is on the left
+    else:
+        # print("the goal is on the right part of the screen")
+        return 1 # point is on the right
+
+in_goal_area = False
+goal = 0
+frames_in_goal = 0
+
+def check_if_is_goal(image, y1, y4, x1, x2, goal_coordinates, ball_center, frames_in_goal_threshold = 4):
+    global in_goal_area
+    global goal
+    global frames_in_goal
+    global score_team_left
+    global score_team_right
+    # save_image(image)
+    
+    goal_image = image[y1:y4,x1:x2]
+    
+    if ball_center is not None:
+        # ball is detected
+        # print("ball center: ", ball_center)
+        #check if the ball is inside the goal boundig box
+        inside_goal_area = cv.pointPolygonTest(goal_coordinates.reshape((-1,1,2)), ball_center, False)
+        # print(inside_goal_area)
+        # check if the ball is in the goal
+        if inside_goal_area > 0:
+            # print("Ball inside goal area")
+            goal_line = find_goal_line(goal_image)
+            if goal_line is not None:
+                # print("GOAL LINE DETECTED")
+                ball_position = ball_position_relative_to_line(goal_line, ball_center)
+                if ball_position is not None:
+                    if goal_team(image, goal_coordinates) == 0:
+                        # team on the right scored
+                        if(ball_position == 'left'):
+                            if not in_goal_area:
+                                # ball has just entered the goal area
+                                in_goal_area = True
+                            frames_in_goal += 1
+                            if frames_in_goal == 5:
+                                score_team_right += 1
+                                save_image(image)
+                            goal = 1
+                    elif goal_team(image, goal_coordinates) == 1:
+                        # team on the left scored
+                        if(ball_position == 'right'):
+                            if not in_goal_area:
+                                # ball has just entered the goal area
+                                in_goal_area = True
+                            frames_in_goal += 1
+                            if frames_in_goal == 5:
+                                score_team_left += 1
+                                save_image(image)
+                            goal = 1
+        else:
+            # ball is detected and is not in the goal area
+            # print("ball is detected and is not in the goal area")
+            in_goal_area = False
+            frames_in_goal = 0
+            goal = 0
+        # print("score: ", score_team_left, " - ", score_team_right)
+        # print("frames in goal: ", frames_in_goal)
+        
+    return goal
+
 def find_goal_line(img):
     
     # boundaries = [150,255,200], [220,255,255] # barcellona-real
