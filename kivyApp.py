@@ -151,11 +151,28 @@ class SoccerApp(App):
 
             # Update the Image widget with the new image texture
             self.image.texture = texture
+        else:
+            if self.interval:
+                self.capture.release()
+                Clock.unschedule(self.interval)
+            
+            if os.path.isfile("result.avi"):
+                box_popup_detection_stopped = BoxLayout(orientation = 'vertical', padding = (100))
+                box_popup_detection_stopped.add_widget(Label(text="detection stopped, video saved as result.avi"))
+                btn1 = Button(text = "Close")
+                box_popup_detection_stopped.add_widget(btn1)
+                pop=Popup(title="Detection Stopped",content=box_popup_detection_stopped,auto_dismiss=False)
+                btn1.bind(on_press = pop.dismiss)
+                pop.open()
+                # Update the Image widget 
+                self.image.texture = None
+            return
 
 
     def stop_detection(self, instance):
         # Call the Clock unschedule method to stop the image updates
         if self.interval:
+            self.capture.release()
             Clock.unschedule(self.interval)
         if os.path.isfile("result.avi"):
             box_popup_detection_stopped = BoxLayout(orientation = 'vertical', padding = (100))
@@ -165,7 +182,7 @@ class SoccerApp(App):
             pop=Popup(title="Detection Stopped",content=box_popup_detection_stopped,auto_dismiss=False)
             btn1.bind(on_press = pop.dismiss)
             pop.open()
-        # Update the Image widget 
+            # Update the Image widget 
             self.image.texture = None
         
         self.btn_start.disabled = False
